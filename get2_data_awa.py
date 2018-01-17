@@ -22,6 +22,7 @@ from keras.layers import Dense
 from keras.optimizers import SGD, Adam
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from keras.layers import Dropout
 
 
 from sklearn.metrics.pairwise import euclidean_distances
@@ -34,6 +35,7 @@ import os
 
 MIN_SAMPLES_FOR_TRAIN = 64 #70% of 92 samples. Min samples 92 for class 12 in AwA
 MIN_SAMPLES_FOR_VALID = 27 #30% of 92 samples. Min samples 92 for class 12 in AwA
+EPOCHS = 300
 
 GPU_PERCENTAGE = 0.6
 if 1:
@@ -48,7 +50,7 @@ reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr
 early_stopping = EarlyStopping(monitor='val_loss', min_delta=0.0001, patience=10, verbose=1, mode='auto')
 #tensorboard = TensorBoard(log_dir=".".format(time()))
 #tensorboard = TensorBoard(log_dir=path_cross_features, histogram_freq=1, write_graph=True,write_images=True,write_grads=False)
-callbacks_list = [reduce_lr, early_stopping]
+callbacks_list = [reduce_lr]#, early_stopping]
 
 class output_cc:
 	input_train_perm = np.array([])
@@ -245,7 +247,10 @@ def function_get_input_data(obj_input_data):
 		train_locations = tmp['tr_loc']
 		train_labels = tmp['y_tr']
 		test_labels = tmp['y_te']
-		attributes = tmp['attr2']
+		path_info_attr = BASE_PATH + "study/phd-research/data/zsl-data/Synthesized-classifier-cvpr2016/SynC/data/AwA_attr2_new"
+		tmp_attr = scipy.io.loadmat(path_info_attr)
+		
+		attributes = tmp_attr['attr2']
 
 		#Python indexing starts from 0
 		train_locations = train_locations - 1
@@ -274,8 +279,8 @@ def function_get_input_data(obj_input_data):
 				'47(S): walrus', '48(U): raccoon', '49(S): cow', '50(S): dolphin']	
 		#train_class_labels = np.array([0, 1, 2, 3, 10, 20, 21, 22, 27, 28, 29, 45, 46])
 		#test_class_labels = np.array([6, 14, 15, 18, 24, 34])
-		train_class_labels = np.array([0, 20, 6])
-		test_class_labels = np.array([34, 18, 24, 15])
+		train_class_labels = np.array([0, 2, 28, 45])
+		test_class_labels = np.array([42, 48])
 		test_class_labels = test_class_labels - 1
 		train_class_labels = np.delete(train_class_labels, test_class_labels)
 		train_class_labels = train_class_labels + 1
@@ -385,19 +390,23 @@ def baseline_model_regression_seen_to_unseen(visual_dim, semantic_dim):
 	DIM1 = int(visual_dim * 0.5)
 	model = Sequential()
 	model.add(Dense(DIM1, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+	model.add(Dropout(0.4))
 	
 	if DIM1*0.5 > semantic_dim:
 		DIM2 = int(DIM1 * 0.5)
 		model.add(Dense(DIM2, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+		model.add(Dropout(0.4))
 		if DIM2*0.5 > semantic_dim:
 			DIM3 = int(DIM2 * 0.5)
 			model.add(Dense(DIM3, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+			model.add(Dropout(0.4))
+
 	
 	model.add(Dense(semantic_dim, kernel_initializer='normal'))
 	OPTIMIZER_TYPE = 'SGD'
 	if OPTIMIZER_TYPE == 'SGD':
             print "Using SGD optimizer..."
-            OPTIMIZER = SGD(lr=0.001, decay=1e-7, momentum = 0.09, nesterov=True)
+            OPTIMIZER = SGD(lr=0.05, decay=1e-7, momentum = 0.09, nesterov=True)
         elif OPTIMIZER_TYPE == 'adam':
             print "Using adam optimizer..."
             OPTIMIZER = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=1e-7)
@@ -410,17 +419,20 @@ def baseline_model_regression(visual_dim, semantic_dim):
 	model = Sequential()
 	DIM1 = int(visual_dim * 0.5)
 	model.add(Dense(DIM1, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+	model.add(Dropout(0.4))
 	if DIM1 * 0.5 > semantic_dim:
 		DIM2 = int(DIM1 * 0.5)
 		model.add(Dense(DIM2, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+		model.add(Dropout(0.4))
 		if DIM2 * 0.5 > semantic_dim:
 			DIM3 = int(DIM2 * 0.5)
 			model.add(Dense(DIM3, input_dim=visual_dim, kernel_initializer='normal', activation='tanh'))
+			model.add(Dropout(0.4))
 	model.add(Dense(semantic_dim, kernel_initializer='normal'))
 	OPTIMIZER_TYPE = 'adam'
 	if OPTIMIZER_TYPE == 'SGD':
             print "Using SGD optimizer..."
-            OPTIMIZER = SGD(lr=0.01, decay=1e-7, momentum = 0.09, nesterov=True)
+            OPTIMIZER = SGD(lr=0.05, decay=1e-7, momentum = 0.09, nesterov=True)
         elif OPTIMIZER_TYPE == 'adam':
             print "Using adam optimizer..."
             OPTIMIZER = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=1e-7)
@@ -460,7 +472,7 @@ def train_visual_to_semantic_nonspecific_regressor(obj):
 		seed = 7
 		np.random.seed(seed)
 		model = baseline_model_regression(obj.train_data.shape[1], obj.train_attributes.shape[1])
-		model.fit(obj.train_data, obj.train_attributes, validation_split = 0.3, validation_data = (obj.valid_data, obj.valid_attributes), verbose=1, shuffle=True, epochs = 100, callbacks = callbacks_list)
+		model.fit(obj.train_data, obj.train_attributes, validation_split = 0.3, validation_data = (obj.valid_data, obj.valid_attributes), verbose=1, shuffle=True, epochs = EPOCHS, callbacks = callbacks_list)
 		train_data_semantic = function_normalise_data(model.predict(obj.train_data))		
 		valid_data_semantic = function_normalise_data(model.predict(obj.valid_data))		
 		test_data_semantic = function_normalise_data(model.predict(obj.test_data))		
@@ -484,7 +496,7 @@ def get_data_for_seen_to_unseen_regressor(features_train, features_valid, obj, s
 	op_valid = np.tile(obj.prototypes[unseen_class - 1, :], (ip_valid.shape[0], 1))
 	
 	NOISE_FACTOR = 0.05	
-	INCREASE_FACTOR = int(10000 / ip_train.shape[0])
+	INCREASE_FACTOR = int(1000 / ip_train.shape[0])
 	print "Increase factor for seen (class %d) to unseen (class %d) regressor  is %d"%(seen_class, unseen_class, INCREASE_FACTOR)
 	regressor_input = np.tile(ip_train, (INCREASE_FACTOR, 1))
 	regressor_input = regressor_input + NOISE_FACTOR * np.random.normal(0, 1, regressor_input.shape)
@@ -506,7 +518,7 @@ def train_seen_to_unseen_regressor_NEW(features_train, features_valid, features_
 	np.random.seed(seed)
 	regressor_input, regressor_output, valid_input, valid_output = get_data_for_seen_to_unseen_regressor(features_train, features_valid, obj, seen_class, unseen_class)
 	model = baseline_model_regression_seen_to_unseen(regressor_input.shape[1], regressor_output.shape[1])
-	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = 100, batch_size = 32, callbacks = callbacks_list)
+	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = EPOCHS, batch_size = 32, callbacks = callbacks_list)
 	train_attributes_cross_mapped = model.predict(features_train)		
 	valid_attributes_cross_mapped = model.predict(features_valid)		
 	test_attributes_cross_mapped = model.predict(features_test)		
@@ -528,7 +540,7 @@ def train_seen_to_unseen_regressor(features_train, features_valid, obj, seen_cla
 	np.random.seed(seed)
 	regressor_input, regressor_output, valid_input, valid_output = get_data_for_seen_to_unseen_regressor(features_train, features_valid, obj, seen_class, unseen_class)
 	model = baseline_model_regression(regressor_input.shape[1], regressor_output.shape[1])
-	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = 100, callbacks = callbacks_list)
+	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = EPOCHS, callbacks = callbacks_list)
 	train_attributes_cross_mapped = model.predict(features_train)		
 	valid_attributes_cross_mapped = model.predict(features_valid)		
 	strt = k * obj.test_attributes.shape[0]
@@ -550,8 +562,8 @@ def get_data_for_visual_to_semantic_regressor(features_train, features_valid, ob
 	ip_train = features_train[train_indices_input_class_samples, :]
 	ip_valid = features_valid[valid_indices_input_class_samples, :]
 	
-	NOISE_FACTOR = 0
-	INCREASE_FACTOR = 1#int(10000 / ip_train.shape[0])
+	NOISE_FACTOR = 0.05
+	INCREASE_FACTOR = int(1000 / ip_train.shape[0])
 	print "Increase factor for visual (class %d) to semantic (class %d) regressor  is %d"%(visual_class, semantic_class, INCREASE_FACTOR)
 	#NOTE: Permutation of data TO BE implemented
 	
@@ -577,7 +589,7 @@ def train_visual_to_semantic_cross_regressor(features_train, features_valid, fea
 	np.random.seed(seed)
 	regressor_input, regressor_output, valid_input, valid_output = get_data_for_visual_to_semantic_regressor(features_train, features_valid, obj, visual_class, semantic_class)
 	model = baseline_model_regression(regressor_input.shape[1], regressor_output.shape[1])
-	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = 100, callbacks = callbacks_list)
+	model.fit(regressor_input, regressor_output, validation_split = 0.3, validation_data = (valid_input, valid_output), verbose=1, shuffle=True, epochs = EPOCHS, callbacks = callbacks_list)
 	train_attributes_cross = model.predict(features_train)		
 	valid_attributes_cross = model.predict(features_valid)		
 	test_attributes_cross = model.predict(features_test)		
@@ -714,7 +726,7 @@ def visualize_data(data, labels, classes, dataset_class_names, string_title, fig
 	figurename = data_save_path + '/' + figure_title	
 	manager = plt.get_current_fig_manager()
 	manager.resize(*manager.window.maxsize())
-	plt.show()
+	#plt.show()
 	plt.savefig(figurename + '.eps', format='eps',dpi=1000, bbox_inches='tight')
 	plt.savefig(figurename + '.png', bbox_inches = 'tight')
 	plt.close("all")
@@ -750,6 +762,6 @@ def visualize_attributes_and_proto(data, labels, classes, dataset_class_names, p
 	figurename = data_save_path + '/' + figure_title	
 	plt.savefig(figurename + '.eps', format='eps',dpi=1000, bbox_inches='tight')
 	plt.savefig(figurename + '.png', bbox_inches = 'tight')
-	plt.show()
+	#plt.show()
 	plt.close("all")
 	#pdb.set_trace()

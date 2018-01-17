@@ -51,7 +51,7 @@ INCREASE_FACTOR_CAE = 100
 dataset_list = ['sample_wt', 'AwA']
 DATASET_INDEX = 1
 #DATA_SAVE_PATH = '../data-awa/data1/'
-DATA_SAVE_PATH = '/home/SharedData/omkar/study/phd-research/codes/tf-codes/data-zsl/data-awa/data6/'
+DATA_SAVE_PATH = '/home/SharedData/omkar/study/phd-research/codes/tf-codes/data-zsl/data-awa/data8/'
 IMAGE_DATA_SAVE_PATH = DATA_SAVE_PATH + 'plots/'
 print DATA_SAVE_PATH
 USE_ENCODER_FEATURES = 1
@@ -260,6 +260,9 @@ cnt = 0
 		Regression f: viusal --> semantic (non-specific)
 -----------------------------------------------------------------
 '''
+obj_classifier.train_data = function_normalise_data(obj_classifier.train_data)
+obj_classifier.valid_data = function_normalise_data(obj_classifier.valid_data)
+obj_classifier.test_data = function_normalise_data(obj_classifier.test_data)
 
 obj_classifier.train_attributes_nsp, obj_classifier.valid_attributes_nsp, obj_classifier.test_attributes_nsp = train_visual_to_semantic_nonspecific_regressor(obj_classifier)
 
