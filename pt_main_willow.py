@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import scale
 
+import pickle
 import scipy.io
 import matplotlib
 #matplotlib.use('Agg')
@@ -25,8 +26,9 @@ import pdb
 from pt_get_data_willow import function_get_training_data_cc, input_cc, output_cc, function_normalise_data
 from pt_get_data_willow import input_data, function_get_input_data, classifier_data
 from pt_get_data_willow import function_reduce_dimension_of_data
-from pt_train_cc_willow import train_pt_cc_input, train_pt_cc_output, function_train_pytorch_cc
+from pt_train_cc_willow import train_pt_cc_input, train_pt_cc_output, train_pytorch_cc
 print "*****************************************************************************************************************************************"
+
 
 '''
 ------------------------------------
@@ -53,6 +55,14 @@ REDUCED_DIMENSION_VISUAL_FEATURE = 500
 dimension_hidden_layer1_coder = 50
 min_num_samples_per_class = 70
 	
+#TODO:Temporary: to be removed
+if 1:
+	filename = DATA_SAVE_PATH + 'obj_input_cc.p'
+	#print filename
+	#pickle.dump(obj_input_cc, open(filename, "wb"))
+	obj_input_cc = pickle.load( open( filename, "rb" ) )
+	train_pytorch_cc(obj_input_cc)
+	pdb.set_trace()
 '''
 ------------------------------------
 ------------------------------------
@@ -218,6 +228,23 @@ Training class-specific AE
 ------------------------------------
 ------------------------------------
 '''
+obj_input_cc = input_cc()
+obj_input_cc.number_of_classes = number_of_classes
+obj_input_cc.dimension_hidden_layer = dimension_hidden_layer1_coder
+obj_input_cc.visual_features = visual_features_dataset_PCAed
+obj_input_cc.train_valid_split = TR_VA_SPLIT
+obj_input_cc.dataset_labels = dataset_labels
+obj_input_cc.dataset_train_labels = dataset_train_labels
+obj_input_cc.dataset_test_labels = dataset_test_labels
+obj_input_cc.train_class_labels = train_class_labels
+obj_input_cc.min_num_samples_per_class = min_num_samples_per_class
+filename = DATA_SAVE_PATH + 'obj_input_cc.p'
+#print filename
+pickle.dump(obj_input_cc, open(filename, "wb"))
+obj_input_cc_new = pickle.load( open( filename, "rb" ) )
+pdb.set_trace()
+train_pytorch_cc(obj_input_cc)
+
 
 exp_name = 'aec_features_all_classes_'
 filename = base_filename + exp_name + 'tr_' + str(number_of_classes) + '.mat'
@@ -227,16 +254,8 @@ if not os.path.isfile(filename):
 		classJ = classI	
 		#Get data for training AEC
 		cc1_start = time.time()
-		obj_input_cc = input_cc()
 		obj_input_cc.classI = classI
 		obj_input_cc.classJ = classJ
-                obj_input_cc.number_of_classes = number_of_classes
-		obj_input_cc.visual_features = visual_features_dataset_PCAed
-		obj_input_cc.train_valid_split = TR_VA_SPLIT
-		obj_input_cc.dataset_labels = dataset_labels
-		obj_input_cc.dataset_train_labels = dataset_train_labels
-		obj_input_cc.dataset_test_labels = dataset_test_labels
-		obj_input_cc.min_num_samples_per_class = min_num_samples_per_class
 
 		obj_cc1_train_valid_data = function_get_training_data_cc(obj_input_cc)
 		cc1_input_train_perm = obj_cc1_train_valid_data.input_train_perm

@@ -55,6 +55,7 @@ class input_cc:
         dataset_test_labels = np.array([])
         min_num_samples_per_class = []
         number_of_classes = []
+	train_class_labels = []
 
         def function(self):
                 print("This is input_cc class")
