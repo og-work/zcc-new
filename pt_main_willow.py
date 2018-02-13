@@ -25,8 +25,8 @@ import pdb
 #User defined functions
 from pt_get_data_willow import function_get_training_data_cc, input_cc, output_cc, function_normalise_data
 from pt_get_data_willow import input_data, function_get_input_data, classifier_data
-from pt_get_data_willow import function_reduce_dimension_of_data
-from pt_train_cc_willow import train_pt_cc_input, train_pt_cc_output, train_pytorch_cc
+from pt_get_data_willow import function_reduce_dimension_of_data, train_pt_cc_input
+from pt_train_cc_willow import train_pytorch_cc
 print "*****************************************************************************************************************************************"
 
 
@@ -62,7 +62,6 @@ if 1:
 	#pickle.dump(obj_input_cc, open(filename, "wb"))
 	obj_input_cc = pickle.load( open( filename, "rb" ) )
 	train_pytorch_cc(obj_input_cc)
-	pdb.set_trace()
 '''
 ------------------------------------
 ------------------------------------
@@ -115,7 +114,7 @@ obj_classifier = classifier_data()
 cnt = 0
 #NOTE: TO BE REMOVED        
 visual_features_dataset_PCAed_unnorm = function_reduce_dimension_of_data(visual_features_dataset, visual_features_dataset, REDUCED_DIMENSION_VISUAL_FEATURE)
-visual_features_dataset_PCAed = function_normalise_data(visual_features_dataset)
+visual_features_dataset_PCAed = function_normalise_data(visual_features_dataset_PCAed_unnorm)
 visual_features_dataset = visual_features_dataset_PCAed
 
 cnt = 0
@@ -243,7 +242,7 @@ filename = DATA_SAVE_PATH + 'obj_input_cc.p'
 pickle.dump(obj_input_cc, open(filename, "wb"))
 obj_input_cc_new = pickle.load( open( filename, "rb" ) )
 pdb.set_trace()
-train_pytorch_cc(obj_input_cc)
+train_pytorch_cc(obj_input_cc_new)
 
 
 exp_name = 'aec_features_all_classes_'

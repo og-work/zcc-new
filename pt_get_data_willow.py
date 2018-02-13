@@ -18,6 +18,8 @@ import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+
+
 class output_cc:
         input_train_perm = np.array([])
         output_train_perm = np.array([])
@@ -91,6 +93,34 @@ class classifier_data():
 		
 	def function(self):
 		print "This is a classifer data object..."
+
+class train_pt_cc_input:
+        cc1_input_train_perm = np.array([])
+        cc1_output_train_perm = np.array([])
+        cc1_input_valid_perm = np.array([])
+        cc1_output_valid_perm = np.array([])
+        obj_classifier_data = classifier_data()
+        dimension_hidden_layer1 = []
+        EPOCHS_CC = []
+        input_class = []
+        output_class = []
+        dataset_name = []
+        data_save_path = []
+        dim_feature = []
+        def function(self):
+                print("This is train pytorch cc input class")
+
+class train_pt_cc_output:
+        decoded_data_train_cc1 = np.array([])
+        encoded_data_train_cc1 = np.array([])
+        decoded_data_valid_cc1 = np.array([])
+        encoded_data_valid_cc1 = np.array([])
+        decoded_data_test_cc1 = np.array([])
+        encoded_data_test_cc1 = np.array([])
+        obj_classifier = classifier_data()
+
+        def function(self):
+                print("This is train_pt_cc_output class")
 
 
 def function_get_input_data(obj_input_data):
