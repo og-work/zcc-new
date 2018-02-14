@@ -179,7 +179,7 @@ def function_normalise_data(unnormalised_data):
 		#	normalised_data = []
 		raise NameError("Something went wrong in normalisation...") 
 	elif norm_type == 2:
-		print "Normalisation between -1 to 1 ..."
+		#print "Normalisation between -1 to 1 ..."
 
 		if unnormalised_data.shape[0] != 0:
 			if (unnormalised_data.max() != unnormalised_data.min()):
@@ -189,7 +189,7 @@ def function_normalise_data(unnormalised_data):
 			normalised_data = normalised_data * 2 - 1
 		else:
 			normalised_data = []
-			raise NameError("Something went wrong in normalisation...") 
+			raise NameError("Something went wrong in normalisation. Number of samples can not be zero") 
 		
 	else:
 		print "No normalisation ..."
