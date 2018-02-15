@@ -11,8 +11,16 @@ TODO List:
 -add L2 regularizer loss for weights: done
 -biases:done(by default)
 -adding noise to sample:done
--load and store and resume training:to check
+-load and store and resume training:done
 -test/evaluation:done
+
+-14 Feb 2018/Wednesday
+-weight initialisation
+-decoder weights check/proper training of decoder
+-concat from decoder and then one fc layer before classifier
+-random shuffling of input data
+-iterated training for coders
+
 
 '''
 
@@ -22,6 +30,7 @@ import numpy as np
 import torch
 import torchvision
 from torch import nn
+import torch.nn.init as init
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -34,7 +43,13 @@ import time
 import os 
 import scipy.io
 
-NUMBER_OF_EPOCHS = 50
+'''
+--------------------------------------
+Constants/Macro
+--------------------------------------
+'''
+
+NUMBER_OF_EPOCHS = 100
 learning_rate = 1e-5
 alpha = 0.2
 NOISE_FACTOR = 0.05
@@ -51,17 +66,38 @@ NUMBER_OF_TRAIN_BATCHES = int(CC_DATA_SIZE / TRAIN_BATCH_SIZE)
 NUMBER_OF_TEST_SAMPLES_ALL_CLASSES = 633
 TEST_BATCH_SIZE = 633
 NUMBER_OF_TEST_BATCHES = int(np.ceil(NUMBER_OF_TEST_SAMPLES_ALL_CLASSES / TEST_BATCH_SIZE))
-MODEL_SAVE_PATH = './e2e_model_5.pth'
+MODEL_SAVE_PATH = './e2e_model_7.pth'
+MODEL_LOAD_PATH = './e2e_model_7.pth'
+INITIAL_WEIGHT_PATH = '/home/SharedData/omkar/study/phd-research/codes/tf-codes/data-willow/initial_weights/'
+
 '''
 model 1: 70:30 train:valid and then test with test acc 70%
 Model 3: full train and test
 Model 4: 80:20 train:valid and then test with test acc X%
-Model 5: 80:20 train:valid and then test with test acc X%, alpha = 0.2
+Model 5: 80:20 train:valid and then test with test & valid acc 60%, train 100%, alpha = 0.2
+Model 6: 80:20 train:valid, weight init, zero bias, unit norm Xavier initialisation, alpha = 0.2, train 98% valid 58%
+Model 7: 80:20 train:valid, weight init, zero bias, unit norm Xavier initialisation, shuffling train, alpha = 0.2, train 98% valid 58%
+
 '''
 LIST_TRAIN_OPTIONS = ['TRAIN_FROM_SCRATCH', 'RETRAIN']
-TRAIN_OPTION = LIST_TRAIN_OPTIONS[0]
+TRAIN_OPTION = LIST_TRAIN_OPTIONS[1]
 
+def write_sample_weights():
+	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(1) + '_cl2_' + str(1) + '_Wh'
+	Wh = np.ones((500, 50), dtype=float) * 1.1
+        scipy.io.savemat(filename, dict(Wh = Wh))
+	
+	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(1) + '_cl2_' + str(1) + '_Wo'
+	Wo = np.ones((50, 500), dtype=float) * 9.9
+        scipy.io.savemat(filename, dict(Wo = Wo))
 
+	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(1) + '_cl2_' + str(1) + '_bh'
+	bh = np.ones((50), dtype=float) * 2.2
+        scipy.io.savemat(filename, dict(bh = bh))
+
+	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(1) + '_cl2_' + str(1) + '_bo'
+	bo = np.ones((500), dtype=float) * 4.4
+        scipy.io.savemat(filename, dict(bo = bo))
 '''
 -------------------------------------------------
 User defined functions
@@ -110,11 +146,26 @@ def get_testing_data(batch, data, labels, test_classes):
 	
 	return input_data, input_batch_labels
 
-def get_training_data_class_specific(input_class, output_class, batch, data, labels, train_classes):
-	indices_input_class_samples = np.flatnonzero(labels == input_class)
-	indices_input_class_samples = indices_input_class_samples[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
-	indices_output_class_samples = np.flatnonzero(labels == output_class)
-	indices_output_class_samples = indices_output_class_samples[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
+def shuffle_training_data(dataset_train_labels, train_class_labels):
+	#***NOTE***: Only training samples to be shuffled and the validation samples.
+	shuffled_indices_list = []
+	for this_class in train_class_labels:
+	        indices_this_class_samples = np.flatnonzero(dataset_train_labels == this_class)
+	        indices_this_class_samples = indices_this_class_samples[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
+		np.random.shuffle(indices_this_class_samples)
+		shuffled_indices_list.append(indices_this_class_samples)
+	return shuffled_indices_list
+
+def get_training_data_class_specific(input_class, output_class, batch, data, labels, train_classes, shuffled_indices_list):
+	#pdb.set_trace()
+	#indices_input_class_samples1 = np.flatnonzero(labels == input_class)
+	indices_input_class_samples = np.asarray(shuffled_indices_list[input_class - 1])
+	#indices_input_class_samples1 = indices_input_class_samples1[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
+	#indices_input_class_samples = indices_input_class_samples[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
+	#indices_output_class_samples = np.flatnonzero(labels == output_class)
+	indices_output_class_samples = np.asarray(shuffled_indices_list[output_class - 1])
+	#indices_output_class_samples = indices_output_class_samples[:NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET]
+	
 	indices_input_class_samples = np.repeat(indices_input_class_samples, np.size(indices_input_class_samples))
 	indices_output_class_samples = np.tile(indices_output_class_samples, np.size(indices_output_class_samples))
 	
@@ -226,6 +277,26 @@ class testNet(nn.Module):
             hidden = F.tanh(i2h(inp) + h2h(hidden))
         return hidden
 
+def get_initial_weights(input_class, output_class):
+	input_class = 1
+	output_class = 1 #TODO: to be removed later
+ 	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(input_class) + '_cl2_' + str(output_class) + '_Wh'
+	t1 = scipy.io.loadmat(filename)
+	encoder_initial_weights = t1['Wh']	
+	encoder_initial_weights = encoder_initial_weights.transpose()
+ 	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(input_class) + '_cl2_' + str(output_class) + '_Wo'
+	t2 = scipy.io.loadmat(filename)
+	decoder_initial_weights = t2['Wo']	
+	decoder_initial_weights = decoder_initial_weights.transpose()
+	'''
+ 	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(input_class) + '_cl2_' + str(output_class) + '_bh'
+	t3 = scipy.io.loadmat(filename)
+	encoder_initial_bias = t3['bh']	
+ 	filename = INITIAL_WEIGHT_PATH + 'WILLOW_500_50_cl1_' + str(input_class) + '_cl2_' + str(output_class) + '_bo'
+	t4 = scipy.io.loadmat(filename)
+	decoder_initial_bias = t4['bo']
+	'''
+	return torch.from_numpy(encoder_initial_weights).float(), torch.from_numpy(decoder_initial_weights).float()
 '''
 ---------------------------------------------
 ---------------------------------------------
@@ -276,7 +347,7 @@ MLP Autoencoder
 '''
 
 class autoencoder(nn.Module):
-	def __init__(self, input_output_dim, hidden_layer_dim):
+	def __init__(self, input_output_dim, hidden_layer_dim, input_class, output_class):
 		super(autoencoder, self).__init__()
 		self.input_output_dim = input_output_dim
 		self.hidden_layer_dim = hidden_layer_dim
@@ -289,10 +360,17 @@ class autoencoder(nn.Module):
 			nn.Linear(hidden_layer_dim, input_output_dim),
 			nn.Tanh())
 		else:
+			#encoder_initial_weights, decoder_initial_weights = get_initial_weights(input_class, output_class)
 	                self.fc1 = nn.Linear(self.input_output_dim, self.hidden_layer_dim)
 	                self.fc2 = nn.Linear(self.hidden_layer_dim, self.input_output_dim)
-			
-	
+			#pdb.set_trace()
+			#self.fc1.weight = torch.nn.Parameter(encoder_initial_weights)
+			#self.fc2.weight = torch.nn.Parameter(decoder_initial_weights)
+			init.xavier_normal(self.fc1.weight, gain=1)
+			init.xavier_normal(self.fc2.weight, gain=1)
+			self.fc1.bias.data.fill_(0)
+			self.fc2.bias.data.fill_(0)
+				
 	def forward(self, x):
 		if 0:
 			encoded_features = self.encoder(x)
@@ -322,8 +400,9 @@ class E2E_NETWORK_TRAIN(nn.Module):
 
 		#Work around for using list modules
 		self.ae_bank = ListModule(self, 'ae_bank_')
-		for i in range(self.number_of_classes*self.number_of_classes):
-		    self.ae_bank.append(autoencoder(self.input_output_dim, self.hidden_layer_dim))
+		for input_class in self.train_class_labels:
+			for output_class in self.train_class_labels:
+				    self.ae_bank.append(autoencoder(self.input_output_dim, self.hidden_layer_dim, input_class, output_class))
 
 	def forward(self, data, input_class, output_class):
 		p = 0
@@ -357,8 +436,10 @@ class E2E_NETWORK_TEST(nn.Module):
 		
 		#Work around for using list modules
 		self.ae_bank = ListModule(self, 'ae_bank_')
-		for i in range(self.number_of_classes*self.number_of_classes):
-		    self.ae_bank.append(autoencoder(self.input_output_dim, self.hidden_layer_dim))
+		k = 0
+		for input_class in self.train_class_labels:
+			for output_class in self.train_class_labels:
+				self.ae_bank.append(autoencoder(self.input_output_dim, self.hidden_layer_dim, input_class, output_class))
 
 	def forward(self, data):
 		p = 0
@@ -400,7 +481,7 @@ train the model
 ---------------------------------------------
 ---------------------------------------------
 '''
-def train(model, optimizer, obj_input, batch, epoch):
+def train(model, optimizer, obj_input, batch, epoch, shuffled_indices_list):
 	model.train()
 	model.cuda()
 	#input_data, output_data, gt_labels = get_training_data(batch, obj_input.visual_features, obj_input.dataset_train_labels, obj_input.train_class_labels)			
@@ -414,7 +495,7 @@ def train(model, optimizer, obj_input, batch, epoch):
 		for output_class in obj_input.train_class_labels:
 			k = k + 1
 			#print "Batch %d, class pair: (%d, %d)"%(batch, input_class, output_class)
-			input_data, output_data, gt_labels = get_training_data_class_specific(input_class, output_class, batch, obj_input.visual_features, obj_input.dataset_train_labels, obj_input.train_class_labels)			
+			input_data, output_data, gt_labels = get_training_data_class_specific(input_class, output_class, batch, obj_input.visual_features, obj_input.dataset_train_labels, obj_input.train_class_labels, shuffled_indices_list)			
 		
 			# ===================forward=====================
 			input_data = get_pytorch_variable(input_data)
@@ -510,7 +591,7 @@ def train_pytorch_cc(obj_input):
 	hidden_layer_dim = obj_input.dimension_hidden_layer
 	number_of_classes = obj_input.number_of_classes
 	train_class_labels = obj_input.train_class_labels
-
+	write_sample_weights()
 	if 1:
 		'''
 			-------------------Training-------------------
@@ -528,8 +609,9 @@ def train_pytorch_cc(obj_input):
 			running_total_loss = 0
 			running_mse_loss = 0
  			running_clafr_loss = 0
+			shuffled_train_indices_list = shuffle_training_data(obj_input.dataset_train_labels, train_class_labels)
 			for batch in range(NUMBER_OF_TRAIN_BATCHES):
-				acc_train_batch, total_loss_batch, mse_loss_batch, clafr_loss_batch, mse_loss_array = train(e2e_model_train, optimizer, obj_input, batch, epoch)
+				acc_train_batch, total_loss_batch, mse_loss_batch, clafr_loss_batch, mse_loss_array = train(e2e_model_train, optimizer, obj_input, batch, epoch, shuffled_train_indices_list)
 				mse_losses_for_coders = np.vstack((mse_losses_for_coders, mse_loss_array))
 				scipy.io.savemat('./mse_losses_for_coders', dict(mse_losses_for_coders = mse_losses_for_coders))
 				running_acc_batch += acc_train_batch
@@ -561,6 +643,6 @@ def train_pytorch_cc(obj_input):
 			running_acc_batch += acc_batch
 			running_acc_batch = running_acc_batch / (batch + 1.0)
 			print('Batch [%4d/%4d], Running TEST Accuracy:{:%4.4f}'\
-			%(batchi + 1, NUMBER_OF_TEST_BATCHES, running_acc_batch))
+			%(batch + 1, NUMBER_OF_TEST_BATCHES, running_acc_batch))
 
 	pdb.set_trace()
