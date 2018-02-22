@@ -16,8 +16,8 @@ TODO List:
 -test/evaluation:done
 
 -14 Feb 2018/Wednesday
--weight initialisation : done to check on actual weights
--decoder weights check/proper training of decoder
+-weight initialisation : done
+-decoder weights check/proper training of decoder: done
 -concat from decoder and then one fc layer before classifier
 -random shuffling of input data: done
 -iterated training for coders
@@ -25,13 +25,20 @@ TODO List:
 15 Feb 2018/ Thursday
 -adaptive alpha: done
 -average pooling of concat features to give k diemnsion only
--drop out in classifier
+-drop out in classifier: done
 
 16 Feb 2018/ Friday
 -adaptive pooling of coders itself by adding one layer to give weights to hidden feature of each coder
--check individual coders performance
+-check individual coders performance: done
 -train N coders at a time rather only one
 -stop classifier loss gradients for other coders /random learning
+
+20 Feb 2018/ Tuesday
+-remove data augmentation to avoid overfitting, remove noise, make batch size smaller: done
+-feature normalisation zero mean and unit variance instead of -1 to +1
+-use of tanh in classifier
+-reduce batch size, make code ***faster***
+-corrupt only input samples and not the output as in denoising AE
 '''
 
 import os
@@ -60,31 +67,41 @@ Constants/Macro
 '''
 CUDA_TYPE = torch.cuda.FloatTensor
 NUMBER_OF_EPOCHS = 500
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-7
 WEIGHT_DECAY = 1e-5
 ALPHA = 0.2
 NOISE_FACTOR = 0.05
 NUMBER_OF_CLASSES = 7
 MIN_NUMBER_OF_SAMPLES_OF_CLASS = 70
 TR_TS_VA_SPLIT = [0.8, 0.2]
+
 NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET = int(TR_TS_VA_SPLIT[0] * MIN_NUMBER_OF_SAMPLES_OF_CLASS)
 NUMBER_OF_PERMUTED_SAMPLES = NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET * NUMBER_OF_TRAIN_SAMPLES_IN_SUBSET
 CC_DATA_SIZE = 10000
 INCREASE_FACTOR = int(CC_DATA_SIZE / NUMBER_OF_PERMUTED_SAMPLES)
-TRAIN_BATCH_SIZE = 2000
-#NUMBER_OF_BATCHES = int(NUMBER_OF_PERMUTED_SAMPLES / TRAIN_BATCH_SIZE)
-NUMBER_OF_TRAIN_BATCHES = int(CC_DATA_SIZE / TRAIN_BATCH_SIZE)
+TRAIN_BATCH_SIZE = 16
+NUMBER_OF_TRAIN_BATCHES = int(np.ceil(float(NUMBER_OF_PERMUTED_SAMPLES) / TRAIN_BATCH_SIZE))
+#NUMBER_OF_TRAIN_BATCHES = int(CC_DATA_SIZE / TRAIN_BATCH_SIZE)
+
 NUMBER_OF_TEST_SAMPLES_ALL_CLASSES = 633
 TEST_BATCH_SIZE = 633
 NUMBER_OF_TEST_BATCHES = int(np.ceil(NUMBER_OF_TEST_SAMPLES_ALL_CLASSES / TEST_BATCH_SIZE))
-DATA_SAVE_PATH = '../../data-willow/model1/'
 
-MODEL_SAVE_PATH = DATA_SAVE_PATH + 'e2e_model_13.pth'
-MODEL_LOAD_PATH = DATA_SAVE_PATH + 'e2e_model_13.pth'
+DATA_SAVE_PATH = '../../data-willow/model1/'
+ITR = 1 #for saving two models with different names to avoid corruption
+MODEL_SAVE_PATH = DATA_SAVE_PATH + 'e2e_model1_15_'
+MODEL_LOAD_PATH = DATA_SAVE_PATH + 'e2e_model1_15_' + str(ITR) + '.pth'
 LIST_TRAIN_OPTIONS = ['TRAIN_FROM_SCRATCH', 'RETRAIN']
 TRAIN_OPTION = LIST_TRAIN_OPTIONS[0]
 
 INITIAL_WEIGHT_PATH = '/home/SharedData/omkar/study/phd-research/codes/tf-codes/data-willow/initial_weights/'
+
+print '*****************************************************************************************************************************************'
+print 'Data path %s: '%DATA_SAVE_PATH
+if TRAIN_OPTION == 'RETRAIN':
+	print 'Loading previously saved model from %s'%MODEL_LOAD_PATH
+print 'Saving model in each epoch to %s'%MODEL_SAVE_PATH
+print 'Learning rate: %.10f'%LEARNING_RATE
 
 '''
 model  1: 70:30 train:valid and then test with test acc 70%
@@ -99,6 +116,9 @@ Model  9: Same as model 8, train 100% valid/test 62%
 Model 10: Weight decay 1e-5, weight init from conf1_18 weights
 Model 11: weight init from conf1_18 weights, SGD with LR 1e^-2, train 100, valid 65, test 65
 Model 12: weight init from conf1_18 weights, SGD with LR 1e^-4
+Model 14: weight init from conf1_18 weights, ADAM, LR 1e-5, no data augmentation, batch size 64, train 100, valid 70 run till epoch 8
+Model 15: weight init from conf1_18 weights, ADAM, LR 1e-5, no data augmentation, batch size 64, Drop out for classifier
+
 '''
 
 def dump_weights(model, epoch, batch, input_class, output_class, string):
@@ -166,12 +186,14 @@ Save results
 -------------------------------------------------
 '''
 def save_performance_para(total_loss, mse_loss, clafr_loss, acc, split):
-	filename = DATA_SAVE_PATH + 'total_loss' + split  
+	filename = DATA_SAVE_PATH + 'total_loss_' + split  
         scipy.io.savemat(filename, dict(total_loss = np.asarray(total_loss)))
-	filename = DATA_SAVE_PATH + 'mse_loss' + split
+	filename = DATA_SAVE_PATH + 'mse_loss_' + split
         scipy.io.savemat(filename, dict(mse_loss = np.asarray(mse_loss)))
-	filename = DATA_SAVE_PATH + 'clafr_loss' + split
+	filename = DATA_SAVE_PATH + 'clafr_loss_' + split
         scipy.io.savemat(filename, dict(clafr_loss = np.asarray(clafr_loss)))
+	filename = DATA_SAVE_PATH + 'acc_' + split
+        scipy.io.savemat(filename, dict(acc = np.asarray(acc)))
 
 
 '''
@@ -295,8 +317,8 @@ def get_training_data_class_specific(input_class, output_class, batch, data, lab
 	end_ind = start_ind + TRAIN_BATCH_SIZE
 
 	#Data augmentation
-	indices_input_class_samples = np.tile(indices_input_class_samples, (1, INCREASE_FACTOR))
-	indices_output_class_samples = np.tile(indices_output_class_samples, (1, INCREASE_FACTOR))
+	#indices_input_class_samples = np.tile(indices_input_class_samples, (1, INCREASE_FACTOR))
+	#indices_output_class_samples = np.tile(indices_output_class_samples, (1, INCREASE_FACTOR))
 
 	indices_input_class_samples = indices_input_class_samples.flatten()
 	indices_output_class_samples = indices_output_class_samples.flatten()
@@ -308,11 +330,11 @@ def get_training_data_class_specific(input_class, output_class, batch, data, lab
 	output_data = data[output_batch_indices, :]
 
 	#Add noise to input and output
-	input_data = input_data + NOISE_FACTOR * np.random.normal(0, 1, input_data.shape)
-	output_data = output_data + NOISE_FACTOR * np.random.normal(0, 1, output_data.shape)
+	#input_data = input_data + NOISE_FACTOR * np.random.normal(0, 1, input_data.shape)
+	#output_data = output_data + NOISE_FACTOR * np.random.normal(0, 1, output_data.shape)
 	
-	input_data = function_normalise_data(input_data)
-	output_data = function_normalise_data(output_data)
+	#input_data = function_normalise_data(input_data)
+	#output_data = function_normalise_data(output_data)
 
 	batch_labels = []	
 	batch_labels.append([input_class]*input_data.shape[0])
@@ -328,7 +350,16 @@ Save model using criteria
 '''
 def save_model(model):
 	#Use criterion to save the model	
-	torch.save(model.state_dict(), MODEL_SAVE_PATH)
+	#Use criterion to save the model        
+        global ITR
+        if ITR == 1:
+                ITR = 2
+                torch.save(model.state_dict(), MODEL_SAVE_PATH + str(ITR) + '.pth')
+        else:
+                ITR = 1
+                torch.save(model.state_dict(), MODEL_SAVE_PATH + str(ITR) + '.pth')
+
+
 
 '''
 ---------------------------------------------------------
@@ -420,8 +451,11 @@ class mlp_classifier(nn.Module):
 
 	else:
 		self.fc1 = nn.Linear(self.clafr_input_feature_dim, int(self.clafr_input_feature_dim*0.5))
+		self.fc1_dropout = nn.Dropout()
 		self.fc2 = nn.Linear(int(self.clafr_input_feature_dim*0.5), int(self.clafr_input_feature_dim*0.25))
+		self.fc2_dropout = nn.Dropout()
 		self.fc3 = nn.Linear(int(self.clafr_input_feature_dim*0.25), int(self.clafr_input_feature_dim*0.1))
+		self.fc3_dropout = nn.Dropout()
 		self.fc4 = nn.Linear(int(self.clafr_input_feature_dim*0.1), int(self.number_of_classes))
 			
     def forward(self, x):
@@ -430,8 +464,11 @@ class mlp_classifier(nn.Module):
 		return predicted_labels
 	else:
 		x = F.relu(self.fc1(x))
+		x = self.fc1_dropout(x)
 		x = F.relu(self.fc2(x))
+		x = self.fc2_dropout(x)
 		x = F.relu(self.fc3(x))
+		x = self.fc3_dropout(x)
 		x = self.fc4(x)
 
 		#return F.log_softmax(x, dim=1)
@@ -596,13 +633,7 @@ def train(model, optimizer, obj_input, batch, epoch, shuffled_indices_list, is_v
 	running_total_loss = 0
 	running_acc = 0
 	k = 0
-	#print "#####################################################################"
-	#print epoch, batch, 0, 0
-	#print model.ae_bank[0].fc1.weight.data
-	#print model.ae_bank[1].fc1.weight.data
-	#print model.ae_bank[10].fc1.weight.data
-	#print model.ae_bank[47].fc1.weight.data
-	#print model.ae_bank[48].fc1.weight.data
+	
 	for input_class in obj_input.train_class_labels:
 		for output_class in obj_input.train_class_labels:
 			k = k + 1
@@ -619,28 +650,19 @@ def train(model, optimizer, obj_input, batch, epoch, shuffled_indices_list, is_v
 			output_data = get_pytorch_variable(output_data)
 			predicted_labels, decoded_feature_conc = model(input_data.cuda(), input_class, output_class)
 			#decoded_feature_conc = get_pytorch_variable(decoded_feature_conc)	
-
 			# ===================loss========================
 			mse_loss = get_mse_loss(decoded_feature_conc.cuda(), output_data.cuda())
 			mse_loss_list.append((mse_loss.data.cpu()).numpy())
 			gt_labels = gt_labels - 1
 			classifier_loss = get_classifier_loss(predicted_labels, (get_pytorch_long_variable(gt_labels)).cuda())
-
 			# ===================backward====================
 			if not is_validation:
-				total_loss = mse_loss + alpha * classifier_loss
+				#total_loss = mse_loss + alpha * classifier_loss
+				#classifier_loss = classifier_loss * alpha
 				optimizer.zero_grad()
 				classifier_loss.backward(retain_graph=True)
 				mse_loss.backward()
 				optimizer.step()
-				#print "#####################################################################"
-				#print epoch, batch, input_class, output_class
-				#print model.ae_bank[0].fc1.weight.data
-				#print model.ae_bank[1].fc1.weight.data
-				#print model.ae_bank[10].fc1.weight.data
-				#pdb.set_trace()
-				#print model.ae_bank[47].fc1.weight.data
-				#print model.ae_bank[48].fc1.weight.data
 			
 			# ===================logs=========================
 			_, predictions = torch.max(predicted_labels.data, 1)
@@ -652,7 +674,6 @@ def train(model, optimizer, obj_input, batch, epoch, shuffled_indices_list, is_v
 			running_mse_loss += mse_loss.data[0]
 			running_clafr_loss += classifier_loss.data[0]
 			
-	save_model(model)
 	mse_loss_list = np.asarray(mse_loss_list)
 	mse_loss_list = mse_loss_list.flatten()
 	return running_acc/k, running_total_loss/k, running_mse_loss/k, running_clafr_loss/k, mse_loss_list
@@ -665,7 +686,7 @@ Test the model
 '''
 def test(obj_input, batch):
 	model = E2E_NETWORK_TEST(obj_input.visual_features.shape[1],  obj_input.dimension_hidden_layer, obj_input.number_of_classes, obj_input.train_class_labels)
-	model.load_state_dict(torch.load(MODEL_SAVE_PATH))
+	model.load_state_dict(torch.load(MODEL_LOAD_PATH))
 	model.eval()
 	model.cuda()
 	
@@ -708,7 +729,7 @@ def train_pytorch_cc(obj_input):
 	number_of_classes = obj_input.number_of_classes
 	train_class_labels = obj_input.train_class_labels
 	#write_sample_weights()
-	if 1:
+	if 0:
 		'''
 			-------------------Training-------------------
 		'''
@@ -748,9 +769,7 @@ def train_pytorch_cc(obj_input):
 				acc_batch_valid, total_loss_batch_valid, mse_loss_batch_valid, clafr_loss_batch_valid, mse_loss_array_valid = train(e2e_model_train, optimizer, obj_input, batch, epoch, shuffled_train_indices_list, IS_VALIDATION, alpha)
 
 				mse_losses_for_coders_train = np.vstack((mse_losses_for_coders_train, mse_loss_array_train))
-				scipy.io.savemat(DATA_SAVE_PATH + 'mse_losses_for_coders_train', dict(mse_losses_for_coders_train = mse_losses_for_coders_train))
 				mse_losses_for_coders_valid = np.vstack((mse_losses_for_coders_valid, mse_loss_array_valid))
-				scipy.io.savemat(DATA_SAVE_PATH + 'mse_losses_for_coders_valid', dict(mse_losses_for_coders_valid = mse_losses_for_coders_valid))
 				
 				running_acc_batch_train += acc_batch_train
 				running_mse_loss_train += mse_loss_batch_train
@@ -771,13 +790,17 @@ def train_pytorch_cc(obj_input):
 			mse_loss_epoch_valid.append(running_mse_loss_valid / NUMBER_OF_TRAIN_BATCHES)
 			clafr_loss_epoch_valid.append(running_clafr_loss_valid / NUMBER_OF_TRAIN_BATCHES)
 			acc_epoch_valid.append(running_acc_batch_valid / NUMBER_OF_TRAIN_BATCHES)
-			
+				
+			scipy.io.savemat(DATA_SAVE_PATH + 'mse_losses_for_coders_train', dict(mse_losses_for_coders_train = mse_losses_for_coders_train))
+			scipy.io.savemat(DATA_SAVE_PATH + 'mse_losses_for_coders_valid', dict(mse_losses_for_coders_valid = mse_losses_for_coders_valid))
+			save_model(e2e_model_train)
+			save_performance_para(total_loss_epoch_train, mse_loss_epoch_train, clafr_loss_epoch_train, acc_epoch_train, 'train')
+			save_performance_para(total_loss_epoch_valid, mse_loss_epoch_valid, clafr_loss_epoch_valid, acc_epoch_valid, 'valid')
+	
 			print('epoch %3d/%3d, Total Loss tr: %4.4f, MSE tr: :%4.4f, Clafr loss tr: %4.4f, Acc tr: %4.4f, Total Loss vl: %4.4f, MSE vl: :%4.4f, Clafr loss vl: %4.4f, Acc vl: %4.4f, alpha %4.4f'%(epoch + 1, NUMBER_OF_EPOCHS, total_loss_epoch_train[-1], mse_loss_epoch_train[-1], clafr_loss_epoch_train[-1], acc_epoch_train[-1], total_loss_epoch_valid[-1], mse_loss_epoch_valid[-1], clafr_loss_epoch_valid[-1], acc_epoch_valid[-1], alpha))
 	
 			alpha = mse_loss_epoch_train[-1] / clafr_loss_epoch_train[-1]
 	
-		save_performance_para(total_loss_epoch_train, mse_loss_epoch_train, clafr_loss_epoch_train, acc_epoch_train, 'train')
-		save_performance_para(total_loss_epoch_valid, mse_loss_epoch_valid, clafr_loss_epoch_valid, acc_epoch_valid, 'valid')
 		end_train = time.time()
 		train_time = end_train - start_train
 		print "Training time %d hr %d min"%((train_time / 3600), (train_time % 3600) / 60)
